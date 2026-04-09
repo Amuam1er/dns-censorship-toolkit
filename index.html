@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DNS Censorship Toolkit</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 640px;
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      color: #00ff88;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 0.75rem;
+      color: #666;
+      margin-bottom: 32px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    input {
+      flex: 1;
+      background: #111;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      padding: 10px 14px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      border-radius: 2px;
+    }
+
+    input:focus { border-color: #00ff88; }
+
+    input::placeholder { color: #444; }
+
+    .resolver-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .resolver-row input {
+      font-size: 0.8rem;
+    }
+
+    .resolver-label {
+      font-size: 0.7rem;
+      color: #555;
+      line-height: 38px;
+      white-space: nowrap;
+    }
+
+    button {
+      background: #00ff88;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 0.05em;
+    }
+
+    button:hover { background: #00cc6a; }
+    button:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+    .result {
+      background: #111;
+      border: 1px solid #222;
+      padding: 20px;
+      border-radius: 2px;
+      display: none;
+    }
+
+    .result.visible { display: block; }
+
+    .status-line {
+      font-size: 1.1rem;
+      font-weight: bold;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #222;
+    }
+
+    .status-ACCESSIBLE { color: #00ff88; }
+    .status-BLOCKED    { color: #ff4444; }
+    .status-SUSPICIOUS { color: #ffaa00; }
+
+    .section {
+      margin-bottom: 14px;
+    }
+
+    .label {
+      font-size: 0.7rem;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+
+    .value {
+      font-size: 0.88rem;
+      color: #ccc;
+    }
+
+    .method-badge {
+      display: inline-block;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      padding: 2px 8px;
+      font-size: 0.8rem;
+      color: #ffaa00;
+      border-radius: 2px;
+      letter-spacing: 0.05em;
+    }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .evidence-item {
+      background: #0d0d0d;
+      border: 1px solid #1e1e1e;
+      padding: 8px;
+      border-radius: 2px;
+    }
+
+    .evidence-item .ev-label {
+      font-size: 0.65rem;
+      color: #555;
+      margin-bottom: 3px;
+    }
+
+    .evidence-item .ev-value {
+      font-size: 0.78rem;
+      color: #aaa;
+      word-break: break-all;
+    }
+
+    .action-box {
+      background: #0d1a12;
+      border: 1px solid #1a3a22;
+      padding: 12px;
+      border-radius: 2px;
+    }
+
+    .action-box .value { color: #88ffbb; }
+
+    .error-msg {
+      color: #ff4444;
+      font-size: 0.85rem;
+      padding: 12px 0;
+      display: none;
+    }
+
+    .spinner {
+      display: none;
+      color: #555;
+      font-size: 0.8rem;
+      padding: 8px 0;
+    }
+
+    .spinner.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>DNS CENSORSHIP TOOLKIT</h1>
+    <p class="subtitle">detect → classify → bypass</p>
+
+    <div class="input-row">
+      <input type="text" id="domain" placeholder="example.com" />
+      <button id="checkBtn" onclick="checkDomain()">CHECK</button>
+    </div>
+
+    <div class="resolver-row">
+      <span class="resolver-label">Custom ISP resolver (optional):</span>
+      <input type="text" id="resolver" placeholder="196.x.x.x" />
+    </div>
+
+    <div class="spinner" id="spinner">Querying resolvers...</div>
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="result" id="result">
+      <div class="status-line" id="statusLine"></div>
+
+      <div class="section">
+        <div class="label">Detection Method</div>
+        <span class="method-badge" id="methodBadge"></span>
+      </div>
+
+      <div class="section">
+        <div class="label">Evidence</div>
+        <div class="evidence-grid">
+          <div class="evidence-item">
+            <div class="ev-label">ISP DNS</div>
+            <div class="ev-value" id="evISP"></div>
+          </div>
+          <div class="evidence-item">
+            <div class="ev-label">Public DNS</div>
+            <div class="ev-value" id="evPublic"></div>
+          </div>
+          <div class="evidence-item">
+            <div class="ev-label">DoH (Ground Truth)</div>
+            <div class="ev-value" id="evDoH"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section action-box">
+        <div class="label">Action</div>
+        <div class="value" id="recommendation"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    
+    const API_URL = "http://localhost:3000";
+
+    async function checkDomain() {
+      const domain = document.getElementById('domain').value.trim();
+      const resolver = document.getElementById('resolver').value.trim();
+
+      if (!domain) {
+        showError('Please enter a domain.');
+        return;
+      }
+
+      const btn = document.getElementById('checkBtn');
+      const spinner = document.getElementById('spinner');
+      const errorMsg = document.getElementById('errorMsg');
+      const resultEl = document.getElementById('result');
+
+      btn.disabled = true;
+      spinner.classList.add('visible');
+      errorMsg.style.display = 'none';
+      resultEl.classList.remove('visible');
+
+      try {
+        const body = { domain };
+        if (resolver) body.resolver = resolver;
+
+        const res = await fetch(`${API_URL}/check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          showError(err.error || 'Server error. Check API is running.');
+          return;
+        }
+
+        const data = await res.json();
+        renderResult(data);
+
+      } catch (err) {
+        showError('Could not reach the API. Ensure the backend is running on ' + API_URL);
+      } finally {
+        btn.disabled = false;
+        spinner.classList.remove('visible');
+      }
+    }
+
+    function renderResult(data) {
+      const statusLabel = data.status.toUpperCase();
+      const statusLine = document.getElementById('statusLine');
+      statusLine.textContent = `Status: ${statusLabel} — ${data.domain}`;
+      statusLine.className = `status-line status-${statusLabel}`;
+
+      document.getElementById('methodBadge').textContent = data.method.toUpperCase();
+      document.getElementById('evISP').textContent = data.evidence.isp_result;
+      document.getElementById('evPublic').textContent = data.evidence.public_result;
+      document.getElementById('evDoH').textContent = data.evidence.doh_result;
+      document.getElementById('recommendation').textContent = data.recommendation;
+
+      document.getElementById('result').classList.add('visible');
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('domain').addEventListener('keydown', e => {
+        if (e.key === 'Enter') checkDomain();
+      });
+    });
+  </script>
+</body>
+</html>
