@@ -76,15 +76,22 @@ function classify(isp, pub, doh) {
     return { status: 'blocked', method: 'hijacking' };
   }
 
-  // CDN VARIANCE — ISP differs but both IPs are known CDN nodes (normal behaviour)
-  if (pub === doh && isp !== pub && isp !== 'ERROR' && isp !== 'TIMEOUT') {
-    if (isKnownCDN(isp) && isKnownCDN(doh)) {
+  // CDN VARIANCE — IPs differ but all are known CDN nodes (normal load balancing)
+  if (isp !== 'ERROR' && isp !== 'TIMEOUT') {
+    const ispIsCDN = isKnownCDN(isp);
+    const pubIsCDN = isKnownCDN(pub);
+    const dohIsCDN = isKnownCDN(doh);
+
+    if (ispIsCDN && pubIsCDN && dohIsCDN) {
       return { status: 'accessible', method: 'cdn-variance' };
     }
-    if (isKnownCDN(isp) || isKnownCDN(doh)) {
+    if ((ispIsCDN || pubIsCDN || dohIsCDN) && isp !== pub) {
       return { status: 'suspicious', method: 'cdn-variance' };
     }
-    // POISONING — neither IP is a CDN, ISP is returning something different
+  }
+
+  // POISONING — DoH and public agree, ISP differs (corrupted response)
+  if (pub === doh && isp !== pub && isp !== 'ERROR' && isp !== 'TIMEOUT') {
     return { status: 'blocked', method: 'poisoning' };
   }
 
@@ -110,7 +117,7 @@ function getRecommendation(method) {
       return 'Your ISP is blocking DNS queries to this domain. Use encrypted DNS (DoH or DoT) — enable DNS over HTTPS in Firefox/Chrome settings or configure 1.1.1.1 with HTTPS.';
     case 'cdn-variance':
       return 'Resolvers returned different IPs, but both are from known CDN providers (e.g. Cloudflare, Google, Fastly). This is normal load balancing behaviour — the domain is accessible.';
-    
+    case 'inconclusive':
       return 'DNS responses are inconsistent. Try manually setting your DNS to 1.1.1.1 and retest. If the issue persists, use DNS over HTTPS.';
     default:
       return 'No action needed. Domain is accessible and DNS is consistent.';
